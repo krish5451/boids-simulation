@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boids – Swarm Intelligence Simulation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+    :root {
+      --bg: #0d1520;
+      --surface: #111d2e;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8f0fe;
+      --text-sec: rgba(255,255,255,0.5);
+      --text-ter: rgba(255,255,255,0.3);
+      --accent: #4fc3f7;
+      --accent-bg: rgba(79,195,247,0.12);
+      --warn: #ff7043;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+    }
+
+    .sim-root {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sim-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.03em;
+    }
+
+    .badge {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: var(--accent-bg);
+      color: var(--accent);
+      border: 1px solid rgba(79,195,247,0.25);
+      letter-spacing: 0.05em;
+    }
+
+    .btns {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background: rgba(255,255,255,0.09);
+      color: var(--text);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    button.act {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-color: rgba(79,195,247,0.35);
+    }
+
+    /* ── CANVAS ── */
+    .canvas-wrap {
+      position: relative;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .overlay-stats {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      background: rgba(13,21,32,0.85);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--text-sec);
+      display: flex;
+      gap: 5px;
+      backdrop-filter: blur(4px);
+    }
+
+    .stat-pill b {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .overlay-hint {
+      position: absolute;
+      bottom: 8px;
+      right: 10px;
+      font-size: 11px;
+      color: var(--text-ter);
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── BOTTOM CONTROLS ── */
+    .bottombar {
+      padding: 6px 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .ctrl {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .ctrl-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .ctrl-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-sec);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .ctrl-val {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .ctrl-sub {
+      font-size: 10px;
+      color: var(--text-ter);
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.1);
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(79,195,247,0.5);
+    }
+
+    /* ── LEGEND ── */
+    .legend-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 5px 10px;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .leg {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-sec);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="sim-root">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="sim-title">Boids</span>
+      <span class="badge">SWARM INTELLIGENCE · REYNOLDS 1987</span>
+    </div>
+    <div class="btns">
+      <button id="btn-play">⏸ Pause</button>
+      <button id="btn-reset">↺ Reset</button>
+      <button id="btn-pred">＋ Predator</button>
+      <button id="btn-clrpred">✕ Clear predators</button>
+      <button id="btn-obst">＋ Obstacle</button>
+      <button id="btn-clrobst">✕ Clear obstacles</button>
+      <button id="btn-scatter">⟶ Scatter</button>
+      <button id="btn-trail" class="act">◌ Trails</button>
+      <button id="btn-coh">Cohesive</button>
+      <button id="btn-sep">Separated</button>
+      <button id="btn-cha">Chaotic</button>
+      <button id="btn-def">Default</button>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap" id="cw">
+    <canvas id="c"></canvas>
+    <div class="overlay-stats">
+      <div class="stat-pill">Speed <b id="st-spd">—</b></div>
+      <div class="stat-pill">Neighbours <b id="st-nbr">—</b></div>
+      <div class="stat-pill">Order <b id="st-ord">—</b></div>
+      <div class="stat-pill">Boids <b id="st-cnt">80</b></div>
+    </div>
+    <div class="overlay-hint">click a bird for details</div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div>
+    <div class="bottombar">
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Separation</span><span class="ctrl-val" id="v-sep">1.5</span></div>
+        <input type="range" id="s-sep" min="0" max="3" step="0.1" value="1.5">
+        <div class="ctrl-sub">avoid crowding</div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Alignment</span><span class="ctrl-val" id="v-ali">1.0</span></div>
+        <input type="range" id="s-ali" min="0" max="3" step="0.1" value="1.0">
+        <div class="ctrl-sub">match heading</div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Cohesion</span><span class="ctrl-val" id="v-coh">1.0</span></div>
+        <input type="range" id="s-coh" min="0" max="3" step="0.1" value="1.0">
+        <div class="ctrl-sub">steer to centre</div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Perception</span><span class="ctrl-val" id="v-rad">65</span></div>
+        <input type="range" id="s-rad" min="20" max="160" step="5" value="65">
+        <div class="ctrl-sub">sensing radius</div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Max Speed</span><span class="ctrl-val" id="v-spd">3.0</span></div>
+        <input type="range" id="s-spd" min="1" max="6" step="0.5" value="3.0">
+        <div class="ctrl-sub">velocity cap</div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-top"><span class="ctrl-name">Flock Size</span><span class="ctrl-val" id="v-cnt">80</span></div>
+        <input type="range" id="s-cnt" min="20" max="250" step="10" value="80">
+        <div class="ctrl-sub">number of birds</div>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <div class="leg"><div class="dot" style="background:#7ec8e3"></div> Bird</div>
+      <div class="leg"><div class="dot" style="background:#ffca28"></div> Selected bird</div>
+      <div class="leg"><div class="dot" style="background:#ff7043"></div> Scared bird</div>
+      <div class="leg"><div class="dot" style="background:#8b5a2b;border-radius:3px;width:18px;height:10px"></div> Predator</div>
+      <div class="leg"><div class="dot" style="background:transparent;border:2px solid rgba(255,255,255,0.4);width:14px;height:14px"></div> Obstacle</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const cw = document.getElementById('cw');
+
+let W, H;
+function resize(){
+  const r = cw.getBoundingClientRect();
+  W = r.width; H = r.height;
+  canvas.width = W; canvas.height = H;
+}
+const ro = new ResizeObserver(resize);
+ro.observe(cw);
+resize();
+
+let cfg = {sep:1.5, ali:1.0, coh:1.0, rad:65, spd:3.0, cnt:80};
+let boids=[], preds=[], obstacles=[], running=true, frame=0, hi=-1, trails=true, addMode=false;
+const MARGIN = 60, TURN = 0.4;
+
+function rnd(a,b){return a+Math.random()*(b-a);}
+function lim(vx,vy,mx){const m=Math.hypot(vx,vy);return m>mx&&m>0?[vx/m*mx,vy/m*mx]:[vx,vy];}
+function smg(vx,vy,m){const s=Math.hypot(vx,vy);return s===0?[0,0]:[vx/s*m,vy/s*m];}
+
+class Bird {
+  constructor(pred=false){
+    this.x = rnd(MARGIN, W-MARGIN);
+    this.y = rnd(MARGIN, H-MARGIN);
+    const a = rnd(0, Math.PI*2);
+    const sp = pred ? 2.2 : rnd(1, cfg.spd);
+    this.vx = Math.cos(a)*sp;
+    this.vy = Math.sin(a)*sp;
+    this.pred = pred;
+    this.sc = 0;
+    this.trail = [];
+  }
+}
+
+function init(){
+  boids = Array.from({length:cfg.cnt}, ()=>new Bird());
+  preds = [];
+}
+init();
+
+function step(){
+  const MF = 0.15;
+  frame++;
+
+  for(const b of boids){
+    let sx=0,sy=0,ax=0,ay=0,cx=0,cy=0,n=0;
+    let flee=false, fx=0, fy=0;
+    const R2 = cfg.rad*cfg.rad;
+
+    for(const pp of preds){
+      const dx=b.x-pp.x, dy=b.y-pp.y, d2=dx*dx+dy*dy;
+      if(d2 < 140*140){
+        const d=Math.sqrt(d2)||1;
+        fx+=dx/d*4; fy+=dy/d*4;
+        flee=true; b.sc=50;
+      }
+    }
+
+    for(const o of boids){
+      if(o===b) continue;
+      const dx=o.x-b.x, dy=o.y-b.y, d2=dx*dx+dy*dy;
+      if(d2<R2){
+        const d=Math.sqrt(d2)||1;
+        sx -= dx/d*(cfg.rad/d); sy -= dy/d*(cfg.rad/d);
+        ax+=o.vx; ay+=o.vy;
+        cx+=o.x; cy+=o.y;
+        n++;
+      }
+    }
+
+    if(n>0){
+      let [sxx,syy]=smg(sx,sy,cfg.spd);
+      let [sdx,sdy]=lim((sxx-b.vx)*cfg.sep,(syy-b.vy)*cfg.sep,MF*cfg.sep);
+      let [axx,ayy]=smg(ax/n,ay/n,cfg.spd);
+      let [adx,ady]=lim((axx-b.vx)*cfg.ali,(ayy-b.vy)*cfg.ali,MF*cfg.ali);
+      const ccx=cx/n-b.x, ccy=cy/n-b.y;
+      let [cxx,cyy]=smg(ccx,ccy,cfg.spd);
+      let [cdx,cdy]=lim((cxx-b.vx)*cfg.coh,(cyy-b.vy)*cfg.coh,MF*cfg.coh);
+      b.vx+=sdx+adx+cdx; b.vy+=sdy+ady+cdy;
+    }
+
+    if(flee){
+      const [ffx,ffy]=smg(fx,fy,cfg.spd);
+      b.vx+=(ffx-b.vx)*0.35; b.vy+=(ffy-b.vy)*0.35;
+    }
+
+    let ox=0, oy=0;
+    for(const o of obstacles){
+      const dx=b.x-o.x, dy=b.y-o.y, d2=dx*dx+dy*dy, r2=(o.r+25)*(o.r+25);
+      if(d2<r2&&d2>0){const d=Math.sqrt(d2);ox+=dx/d*(cfg.rad/d);oy+=dy/d*(cfg.rad/d);}
+    }
+    if(ox||oy){const[offx,offy]=smg(ox,oy,cfg.spd);b.vx+=(offx-b.vx)*0.3;b.vy+=(offy-b.vy)*0.3;}
+
+    if(b.x<MARGIN)    b.vx+=TURN*(1-b.x/MARGIN);
+    if(b.x>W-MARGIN)  b.vx-=TURN*(1-(W-b.x)/MARGIN);
+    if(b.y<MARGIN)    b.vy+=TURN*(1-b.y/MARGIN);
+    if(b.y>H-MARGIN)  b.vy-=TURN*(1-(H-b.y)/MARGIN);
+
+    [b.vx,b.vy]=lim(b.vx,b.vy,cfg.spd*(flee?1.7:1));
+    const ms=cfg.spd*0.35;
+    if(Math.hypot(b.vx,b.vy)<ms)[b.vx,b.vy]=smg(b.vx||0.01,b.vy||0.01,ms);
+
+    b.x=Math.max(4,Math.min(W-4,b.x+b.vx));
+    b.y=Math.max(4,Math.min(H-4,b.y+b.vy));
+
+    if(trails){b.trail.push([b.x,b.y]);if(b.trail.length>16)b.trail.shift();}
+    else b.trail=[];
+    if(b.sc>0)b.sc--;
+  }
+
+  for(const pp of preds){
+    pp.wingPhase+=pp.wingSpeed;
+    let nx=pp.x,ny=pp.y,nd=Infinity;
+    for(const b of boids){const dx=b.x-pp.x,dy=b.y-pp.y,d=dx*dx+dy*dy;if(d<nd){nd=d;nx=b.x;ny=b.y;}}
+    const dx=nx-pp.x,dy=ny-pp.y,d=Math.hypot(dx,dy)||1;
+    pp.vx+=dx/d*0.1;pp.vy+=dy/d*0.1;
+    let ox=0,oy=0;
+    for(const o of obstacles){const dx=pp.x-o.x,dy=pp.y-o.y,d2=dx*dx+dy*dy,r2=(o.r+20)*(o.r+20);if(d2<r2&&d2>0){const d=Math.sqrt(d2);ox+=dx/d*5;oy+=dy/d*5;}}
+    pp.vx+=ox*0.15;pp.vy+=oy*0.15;
+    if(pp.x<MARGIN)pp.vx+=TURN;if(pp.x>W-MARGIN)pp.vx-=TURN;
+    if(pp.y<MARGIN)pp.vy+=TURN;if(pp.y>H-MARGIN)pp.vy-=TURN;
+    [pp.vx,pp.vy]=lim(pp.vx,pp.vy,2.5);
+    pp.x=Math.max(4,Math.min(W-4,pp.x+pp.vx));
+    pp.y=Math.max(4,Math.min(H-4,pp.y+pp.vy));
+    if(trails){pp.trail.push([pp.x,pp.y]);if(pp.trail.length>12)pp.trail.shift();}
+    else pp.trail=[];
+  }
+}
+
+function drawBird(x,y,vx,vy,bodyColor,wingColor,size,alpha){
+  const angle=Math.atan2(vy,vx);
+  ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.rotate(angle);
+  const s=size;
+  ctx.beginPath();ctx.ellipse(0,0,s*0.7,s*0.3,0,0,Math.PI*2);ctx.fillStyle=bodyColor;ctx.fill();
+  ctx.beginPath();ctx.arc(s*0.6,0,s*0.2,0,Math.PI*2);ctx.fillStyle=bodyColor;ctx.fill();
+  ctx.beginPath();ctx.moveTo(s*0.8,-s*0.1);ctx.lineTo(s*1.1,0);ctx.lineTo(s*0.8,s*0.1);ctx.closePath();ctx.fillStyle=wingColor;ctx.fill();
+  ctx.beginPath();ctx.arc(s*0.7,-s*0.05,s*0.06,0,Math.PI*2);ctx.fillStyle='#111';ctx.fill();
+  ctx.restore();
+}
+
+function drawHawk(x,y,vx,vy,wingPhase){
+  const angle=Math.atan2(vy,vx),wingBeat=Math.sin(wingPhase)*0.4,s=10;
+  ctx.save();ctx.globalAlpha=1;ctx.translate(x,y);ctx.rotate(angle);
+  ctx.save();ctx.rotate(-wingBeat);ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(-s*0.4,-s*0.7,-s*1.6,-s*0.2);ctx.quadraticCurveTo(-s*0.8,s*0.3,0,0);ctx.fillStyle='#8b5a2b';ctx.fill();ctx.restore();
+  ctx.save();ctx.rotate(wingBeat);ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(-s*0.4,s*0.7,-s*1.6,s*0.2);ctx.quadraticCurveTo(-s*0.8,-s*0.3,0,0);ctx.fillStyle='#8b5a2b';ctx.fill();ctx.restore();
+  ctx.beginPath();ctx.ellipse(0,0,s*0.8,s*0.25,0,0,Math.PI*2);ctx.fillStyle='#6b3a1f';ctx.fill();
+  ctx.beginPath();ctx.arc(s*0.72,0,s*0.22,0,Math.PI*2);ctx.fillStyle='#4a2810';ctx.fill();
+  ctx.beginPath();ctx.moveTo(s*0.88,-s*0.06);ctx.quadraticCurveTo(s*1.15,0,s*0.92,s*0.12);ctx.strokeStyle='#f4a940';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(s*0.82,-s*0.05,s*0.08,0,Math.PI*2);ctx.fillStyle='#ff0';ctx.fill();
+  ctx.restore();
+}
+
+function draw(){
+  if(trails){ctx.fillStyle='rgba(13,21,32,0.22)';ctx.fillRect(0,0,W,H);}
+  else{ctx.fillStyle='#0d1520';ctx.fillRect(0,0,W,H);}
+
+  ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=1;ctx.strokeRect(MARGIN,MARGIN,W-MARGIN*2,H-MARGIN*2);
+
+  for(const b of [...boids,...preds]){
+    if(!b.trail||b.trail.length<2)continue;
+    ctx.beginPath();ctx.moveTo(b.trail[0][0],b.trail[0][1]);
+    for(let i=1;i<b.trail.length;i++)ctx.lineTo(b.trail[i][0],b.trail[i][1]);
+    ctx.strokeStyle=b.pred?'rgba(139,90,43,0.2)':'rgba(126,200,227,0.18)';ctx.lineWidth=0.8;ctx.stroke();
+  }
+
+  for(const o of obstacles){
+    ctx.beginPath();ctx.arc(o.x,o.y,o.r,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=2;ctx.stroke();
+  }
+
+  const hib=boids[hi];
+  if(hib){
+    ctx.beginPath();ctx.arc(hib.x,hib.y,cfg.rad,0,Math.PI*2);ctx.strokeStyle='rgba(255,202,40,0.25)';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='rgba(255,202,40,0.05)';ctx.fill();
+    for(const b of boids){if(b===hib)continue;const dx=b.x-hib.x,dy=b.y-hib.y;if(dx*dx+dy*dy<cfg.rad*cfg.rad){ctx.beginPath();ctx.moveTo(hib.x,hib.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle='rgba(126,200,227,0.15)';ctx.lineWidth=0.7;ctx.stroke();}}
+  }
+
+  for(let i=0;i<boids.length;i++){
+    const b=boids[i],isHi=i===hi;
+    let bodyCol,wingCol;
+    if(isHi){bodyCol='#ffca28';wingCol='#ffd54f';}
+    else if(b.sc>0){bodyCol='#ff7043';wingCol='#ff8a65';}
+    else{bodyCol='#7ec8e3';wingCol='#4fc3f7';}
+    drawBird(b.x,b.y,b.vx,b.vy,bodyCol,wingCol,7,isHi?1:0.9);
+  }
+
+  for(const pp of preds)drawHawk(pp.x,pp.y,pp.vx,pp.vy,pp.wingPhase);
+}
+
+function statsUpdate(){
+  if(!boids.length)return;
+  if(hi>=0){
+    const b=boids[hi];
+    const speed=Math.hypot(b.vx,b.vy).toFixed(1);
+    let n=0;const R2=cfg.rad*cfg.rad;
+    for(const o of boids){if(o===b)continue;const dx=o.x-b.x,dy=o.y-b.y;if(dx*dx+dy*dy<R2)n++;}
+    document.getElementById('st-spd').textContent=speed;
+    document.getElementById('st-nbr').textContent=n;
+    document.getElementById('st-ord').textContent='Selected';
+    document.getElementById('st-cnt').textContent=hi;
+  } else {
+    let sp=0,nb=0,avx=0,avy=0;const R2=cfg.rad*cfg.rad;
+    for(const b of boids){
+      sp+=Math.hypot(b.vx,b.vy);avx+=b.vx;avy+=b.vy;
+      let n=0;for(const o of boids){if(o===b)continue;const dx=o.x-b.x,dy=o.y-b.y;if(dx*dx+dy*dy<R2)n++;}nb+=n;
+    }
+    const ord=Math.hypot(avx,avy)/(boids.length*cfg.spd);
+    document.getElementById('st-spd').textContent=(sp/boids.length).toFixed(1);
+    document.getElementById('st-nbr').textContent=Math.round(nb/boids.length);
+    document.getElementById('st-ord').textContent=Math.min(ord,1).toFixed(2);
+    document.getElementById('st-cnt').textContent=boids.length;
+  }
+}
+
+let sc=0;
+function loop(){
+  if(running){step();draw();sc++;if(sc%30===0)statsUpdate();}
+  requestAnimationFrame(loop);
+}
+loop();
+
+function updateSliders(){
+  document.getElementById('s-sep').value=cfg.sep;document.getElementById('v-sep').textContent=cfg.sep.toFixed(1);
+  document.getElementById('s-ali').value=cfg.ali;document.getElementById('v-ali').textContent=cfg.ali.toFixed(1);
+  document.getElementById('s-coh').value=cfg.coh;document.getElementById('v-coh').textContent=cfg.coh.toFixed(1);
+  document.getElementById('s-rad').value=cfg.rad;document.getElementById('v-rad').textContent=cfg.rad;
+  document.getElementById('s-spd').value=cfg.spd;document.getElementById('v-spd').textContent=cfg.spd.toFixed(1);
+  document.getElementById('s-cnt').value=cfg.cnt;document.getElementById('v-cnt').textContent=cfg.cnt;
+  const d=cfg.cnt-boids.length;
+  if(d>0){for(let i=0;i<d;i++)boids.push(new Bird());}
+  else if(d<0)boids.splice(cfg.cnt);
+  hi=Math.min(hi,boids.length-1);
+}
+
+function sl(sliderId,cfgKey,valId,decimals){
+  document.getElementById(sliderId).addEventListener('input',e=>{
+    cfg[cfgKey]=parseFloat(e.target.value);
+    document.getElementById(valId).textContent=decimals?cfg[cfgKey].toFixed(decimals):cfg[cfgKey];
+    if(cfgKey==='cnt'){const d=cfg.cnt-boids.length;if(d>0)for(let i=0;i<d;i++)boids.push(new Bird());else if(d<0)boids.splice(cfg.cnt);hi=Math.min(hi,boids.length-1);}
+  });
+}
+sl('s-sep','sep','v-sep',1);sl('s-ali','ali','v-ali',1);sl('s-coh','coh','v-coh',1);
+sl('s-rad','rad','v-rad',0);sl('s-spd','spd','v-spd',1);sl('s-cnt','cnt','v-cnt',0);
+
+document.getElementById('btn-play').addEventListener('click',e=>{
+  running=!running;e.currentTarget.textContent=running?'⏸ Pause':'▶ Play';
+});
+document.getElementById('btn-reset').addEventListener('click',()=>{frame=0;init();});
+document.getElementById('btn-pred').addEventListener('click',()=>{const pp=new Bird(true);pp.wingSpeed=0.18;pp.wingPhase=0;preds.push(pp);});
+document.getElementById('btn-clrpred').addEventListener('click',()=>{preds=[];});
+document.getElementById('btn-scatter').addEventListener('click',()=>{for(const b of boids){const a=rnd(0,Math.PI*2);b.vx=Math.cos(a)*cfg.spd*2;b.vy=Math.sin(a)*cfg.spd*2;}});
+document.getElementById('btn-trail').addEventListener('click',e=>{
+  trails=!trails;
+  e.currentTarget.textContent=trails?'◌ Trails':'◌ Trails off';
+  e.currentTarget.classList.toggle('act',trails);
+});
+document.getElementById('btn-coh').addEventListener('click',()=>{cfg.sep=1.0;cfg.ali=1.0;cfg.coh=2.5;cfg.rad=65;cfg.spd=3.0;cfg.cnt=80;updateSliders();});
+document.getElementById('btn-sep').addEventListener('click',()=>{cfg.sep=2.5;cfg.ali=1.0;cfg.coh=1.0;cfg.rad=65;cfg.spd=3.0;cfg.cnt=80;updateSliders();});
+document.getElementById('btn-cha').addEventListener('click',()=>{cfg.sep=0.5;cfg.ali=0.5;cfg.coh=0.5;cfg.rad=30;cfg.spd=4.0;cfg.cnt=100;updateSliders();});
+document.getElementById('btn-def').addEventListener('click',()=>{cfg.sep=1.5;cfg.ali=1.0;cfg.coh=1.0;cfg.rad=65;cfg.spd=3.0;cfg.cnt=80;updateSliders();});
+
+document.getElementById('btn-obst').addEventListener('click',e=>{addMode=!addMode;e.currentTarget.classList.toggle('act',addMode);});
+document.getElementById('btn-clrobst').addEventListener('click',()=>{obstacles=[];});
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*(W/r.width),my=(e.clientY-r.top)*(H/r.height);
+  if(addMode){obstacles.push({x:mx,y:my,r:30});addMode=false;document.getElementById('btn-obst').classList.remove('act');return;}
+  let best=Infinity,bi=0;
+  for(let i=0;i<boids.length;i++){const dx=boids[i].x-mx,dy=boids[i].y-my,d=dx*dx+dy*dy;if(d<best){best=d;bi=i;}}
+  hi=bi;
+});
+</script>
+
+</body>
+</html>
